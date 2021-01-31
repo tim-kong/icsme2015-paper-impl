@@ -24,18 +24,20 @@ Run `train_and_test.py` to train a recommendation model and test the model at th
 
 > The process proceeds as follows: first, we train a *TIE* model by using the first review, and test the trained model by using the second review, then we update the *TIE* model by using the second review (with its ground truth reviewers). Next, we test using the third review, and update the *TIE* model by using the third review, and so on.
 
-You must run the script with these parameters shown below:
+You should run the script with these parameters shown below:
 
 | Parameter | Description |
 | --- | --- |
-| *reviews_file* | the input JSON file containing the reviews |
-| *output_file* | the file to output the results in |
-| *model_file* | the file to store the model in |
+| *reviews_file* | **Required**, the input JSON file containing the reviews. |
+| *output_file* | **Required**, the file to output the results in. |
+| *model_file* | **Required**, the file to store the model in. |
+| *max_reviews* | **Optional**, the maximum number of reviews to be processed. This implementation will process all reviews if `max_reviews` is not specified. |
+| *alpha* | Parameter `alpha` in original paper. |
 
 Example command:
 
 ```bash
-python train_and_test.py --reviews_file=Android.json --output_file=output/Android_output.json
+python train_and_test.py --reviews_file=Android.json --output_file=output/Android_output.json --model_file=output/Android_model.json
 ```
 
 #### 3. tie_recommend.py

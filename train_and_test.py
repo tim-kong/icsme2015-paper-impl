@@ -14,6 +14,8 @@ if __name__ == "__main__":
     parser.add_argument("--reviews_file", required=True, help="the input JSON file containing the reviews")
     parser.add_argument("--output_file", required=True, help="the file to output the results")
     parser.add_argument("--model_file", required=True, help="the file to store the model")
+    parser.add_argument("--max_reviews", required=False, help="the maximum number of reviews to be processed", type=int)
+    parser.add_argument("--alpha", required=False, help="parameter `alpha` in TIE paper, which defaults to 0.7", type=float)
     args = parser.parse_args()
 
     json_file = open(args.reviews_file, 'r')
@@ -21,6 +23,8 @@ if __name__ == "__main__":
     json_file.close()
 
     stemmer = LancasterStemmer()
+
+    # auxiliary functions
 
     def get_all_reviewers(reviews):
         reviewer_set = set()
@@ -60,7 +64,9 @@ if __name__ == "__main__":
         l = list(s)
         return l
 
-    model = TIEModel(word_list=get_all_words(reviews), reviewer_list=get_all_reviewers(reviews), alpha=0.7, M=50, text_splitter=split_text)
+    alpha = 0.7 if args.alpha is None else args.alpha
+    
+    model = TIEModel(word_list=get_all_words(reviews), reviewer_list=get_all_reviewers(reviews), alpha=alpha, M=50, text_splitter=split_text)
 
     mrr_accumulation = 0
     is_recomm_accumulation_top_10 = 0
@@ -70,11 +76,17 @@ if __name__ == "__main__":
     current_predicted = 0
 
     i = 0
-    while i < len(reviews):
+    result_obj = {
+        "recommendation-results": []
+    }
+    max_reviews = args.max_reviews if args.max_reviews is not None else len(reviews)
+    while i < min(len(reviews), max_reviews):
         if i + 1 == len(reviews):
             break
         model.update(reviews[i])
         recommended_reviewers = model.recommend(reviews[i + 1], max_count=1000)
+        result_obj["recommendation-results"].append({"review-id": reviews[i + 1]["id"],
+        "result": recommended_reviewers[:10]})
         actual_reviewers = list(map(lambda x: x["id"], reviews[i + 1]["reviewers"]))
         
         logging.info("Progress: {}/{} reviews".format(i + 1, len(reviews)))
@@ -101,15 +113,36 @@ if __name__ == "__main__":
         is_recomm_accumulation_top_3 += is_recomm_top_3
         is_recomm_accumulation_top_1 += is_recomm_top_1
 
+        rank = int(1e8)
+        for k in range(len(recommended_reviewers)):
+            if recommended_reviewers[k] in actual_reviewers:
+                rank = k
+                break
+        mrr_accumulation += 1 / (rank + 1)
+
         top10acc = is_recomm_accumulation_top_10 / current_predicted
         top5acc = is_recomm_accumulation_top_5 / current_predicted
         top3acc = is_recomm_accumulation_top_3 / current_predicted
         top1acc = is_recomm_accumulation_top_1 / current_predicted
+        mrr_val = mrr_accumulation / current_predicted
 
-        logging.info('Top-10 Predict Accuracy: %.2f', top10acc)
-        logging.info('Top-5 Predict Accuracy: %.2f', top5acc)
-        logging.info('Top-3 Predict Accuracy: %.2f', top3acc)
-        logging.info('Top-1 Predict Accuracy: %.2f', top1acc)
+        result_obj["top10-accuracy"] = round(top10acc, 2)
+        result_obj["top5-accuracy"] = round(top5acc, 2)
+        result_obj["top3-accuracy"] = round(top3acc, 2)
+        result_obj["top1-accuracy"] = round(top1acc, 2)
+        result_obj["mrr"] = round(mrr_val, 2)
+
+        logging.info('Top-10 Predict Accuracy: %.6f', top10acc)
+        logging.info('Top-5 Predict Accuracy: %.6f', top5acc)
+        logging.info('Top-3 Predict Accuracy: %.6f', top3acc)
+        logging.info('Top-1 Predict Accuracy: %.6f', top1acc)
+        logging.info('MRR: %.6f', mrr_val)
         model.update(reviews[i + 1])
         i += 2
+    
+    output_file = open(args.output_file, 'w')
+    output_file.write(json.dumps(result_obj))
+    output_file.close()
+    logging.info('Recommendation results have been written to {}.'.format(args.output_file))
     model.save(args.model_file)
+    logging.info('Model file has been written to {}.'.format(args.model_file))

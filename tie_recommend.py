@@ -6,7 +6,7 @@ import pickle as pkl
 class TIEModel:
     """TIE Model class. 
     `TIE` is a reviewer recommendation method proposed in an ICSME 2015 paper: 
-      `Who Should Review This Change?
+      `Who Should Review This Change?`
     `TIE` combines the advantages of both text mining and file location-based
     approach.
 
@@ -22,7 +22,7 @@ class TIEModel:
     """
     def __init__(self, word_list, reviewer_list, alpha=0.7, M=100, \
     text_splitter=lambda x: x.split(' ')):
-        """Initiates the model with parameters.
+        """Initialize the model with parameters.
 
         - `word_list` is a list with no repeated words, serving as a vocabulary
         table.
@@ -77,10 +77,23 @@ class TIEModel:
         review = self._transform_review_format(review)
         L = []
         for j in range(len(self.reviewer_list)):
-            c = (1 - self.alpha) * self._get_conf_text(review, j) \
-                + self.alpha * self._get_conf_path(review, j)
-            L.append((j, c))
-        L.sort(key=lambda x: x[1], reverse=True)
+            #c = (1 - self.alpha) * self._get_conf_text(review, j) \
+            #    + self.alpha * self._get_conf_path(review, j)
+            conf_text = self._get_conf_text(review, j)
+            conf_path = self._get_conf_path(review, j)
+
+            L.append([j, conf_text, conf_path])
+        conf_text_sum = sum(map(lambda x: x[1], L))
+        conf_path_sum = sum(map(lambda x: x[2], L))
+        if conf_text_sum == 0:
+            conf_text_sum = 1e-15
+        if conf_path_sum == 0:
+            conf_path_sum = 1e-15
+        for triple in L:
+            triple[1] /= conf_text_sum
+            triple[2] /= conf_path_sum
+        
+        L.sort(key=lambda x: x[1] * self.alpha + x[2] * (1 - self.alpha), reverse=True)
         L = list(
             map(lambda x: self.reviewer_list[x],
                 map(lambda x: x[0], L)
